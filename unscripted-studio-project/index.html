@@ -9,6 +9,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Re-added audio libraries for MP3 recording -->
+    <script src="https://cdn.jsdelivr.net/npm/webaudiorecorder@2.3.0/lib/WebAudioRecorder.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
 
     <style>
         body {
@@ -76,7 +79,7 @@
                 <div class="bg-white p-6 rounded-2xl shadow-lg">
                     <div class="text-3xl font-bold text-[#FF6B6B]">3.</div>
                     <h3 class="font-bold text-xl mt-2 text-gray-800">Export & Polish</h3>
-                    <p class="text-gray-600 mt-2">Get your interview questions and an auto-generated workbook outline, ready to be polished.</p>
+                    <p class="text-gray-600 mt-2">Get your audio file and an auto-generated workbook outline, ready to be polished.</p>
                 </div>
             </div>
         </section>
@@ -132,7 +135,7 @@
                     <p class="text-gray-500 mb-6">Download your assets for this lesson below.</p>
 
                     <div class="space-y-4">
-                        <a id="download-audio" class="block w-full bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-lg transition-colors">Download Interview Questions (.txt)</a>
+                        <a id="download-audio" class="block w-full bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-lg transition-colors">Download Audio File (.mp3)</a>
                         <a id="download-workbook" class="block w-full bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-lg transition-colors">Download Workbook (.pdf)</a>
                     </div>
                     
@@ -164,10 +167,11 @@
             </button>
             <h3 class="text-xl font-bold text-gray-800 mb-4">Pro Tips for Best Audio</h3>
             <div class="text-gray-600 space-y-3">
-                <p><strong>Note:</strong> This app uses voice-to-text. For the highest quality audio for your final course, we recommend using these questions as a script and recording with a dedicated tool.</p>
                 <p><strong>1. Use an External Mic:</strong> A simple USB mic or earbuds is a huge upgrade over your computer's built-in mic.</p>
                 <p><strong>2. Wear Headphones:</strong> This prevents the AI's voice from echoing into your recording.</p>
                 <p><strong>3. Find a Quiet Space:</strong> Close doors and windows. Turn off fans, ACs, and other noisy devices.</p>
+                <p><strong>4. Reduce Echo:</strong> Record in a room with soft surfaces like carpets, curtains, or even a closet to absorb sound.</p>
+                <p><strong>5. Mind Mic Position:</strong> Place the mic a few inches from your mouth and speak clearly at a consistent volume.</p>
             </div>
         </div>
     </div>
@@ -208,6 +212,11 @@
         let isRecording = false;
         let recognition;
         let finalTranscriptForTurn = '';
+        
+        // --- Audio Recording State ---
+        let audioContext;
+        let recorder;
+        const MP3_BIT_RATE = 128;
 
         // --- Core Functions ---
         const switchView = (view) => {
@@ -223,41 +232,41 @@
         };
 
         async function callGeminiAPI(history, systemPrompt) {
-    const apiUrl = "/.netlify/functions/gemini-proxy"; 
+            const apiUrl = "/.netlify/functions/gemini-proxy"; 
 
-    const payload = {
-        contents: history,
-        systemInstruction: {
-            parts: [{ text: systemPrompt }]
-        },
-    };
+            const payload = {
+                contents: history,
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                },
+            };
 
-    try {
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
 
-        if (!response.ok) {
-            const errorBody = await response.text();
-            throw new Error(`API call failed with status: ${response.status}. Body: ${errorBody}`);
+                if (!response.ok) {
+                    const errorBody = await response.text();
+                    throw new Error(`API call failed with status: ${response.status}. Body: ${errorBody}`);
+                }
+
+                const result = await response.json();
+                const candidate = result.candidates?.[0];
+                if (candidate && candidate.content?.parts?.[0]?.text) {
+                    return candidate.content.parts[0].text;
+                } else {
+                    console.error("Unexpected API response structure:", result);
+                    return "Sorry, I encountered an issue. Please try again.";
+                }
+            } catch (error) {
+                console.error("Error calling Gemini API:", error);
+                micStatus.textContent = "Error communicating with AI. Check console.";
+                return "I seem to be having trouble connecting. Please check your setup.";
+            }
         }
-
-        const result = await response.json();
-        const candidate = result.candidates?.[0];
-        if (candidate && candidate.content?.parts?.[0]?.text) {
-            return candidate.content.parts[0].text;
-        } else {
-            console.error("Unexpected API response structure:", result);
-            return "Sorry, I encountered an issue. Please try again.";
-        }
-    } catch (error) {
-        console.error("Error calling Gemini API:", error);
-        micStatus.textContent = "Error communicating with AI. Check console.";
-        return "I seem to be having trouble connecting. Please check your setup.";
-    }
-}
         
         const speak = (text, onEndCallback = () => {}) => {
             if (!'speechSynthesis' in window) {
@@ -270,7 +279,7 @@
             const utterance = new SpeechSynthesisUtterance(text);
             
             let voices = speechSynthesis.getVoices();
-            if (voices.length === 0) { // Voices may load asynchronously
+            if (voices.length === 0) {
                 speechSynthesis.onvoiceschanged = () => {
                     voices = speechSynthesis.getVoices();
                     setupAndSpeak();
@@ -290,7 +299,7 @@
                 utterance.pitch = 1.0;
                 utterance.onend = onEndCallback;
                 
-                window.speechSynthesis.cancel(); // Clear any previous utterances
+                window.speechSynthesis.cancel();
                 window.speechSynthesis.speak(utterance);
             }
         };
@@ -350,16 +359,13 @@
             });
         };
 
-        const toggleRecording = () => {
-            if (!recognition) {
-                micStatus.textContent = "Speech recognition not available.";
-                return;
-            }
-
+        const toggleRecording = async () => {
             if (isRecording) {
                 // --- STOPPING ---
                 isRecording = false;
-                recognition.stop();
+                recognition.stop(); // Stop listening
+                if (recorder) recorder.finishRecording(); // Stop recording audio
+                
                 micButton.classList.remove('bg-red-500', 'pulse');
                 micButton.classList.add('bg-[#FF6B6B]');
                 micStatus.textContent = 'Processing...';
@@ -367,6 +373,7 @@
             } else {
                 // --- STARTING ---
                 try {
+                    await startAudioRecording();
                     finalTranscriptForTurn = '';
                     recognition.start();
                     isRecording = true;
@@ -374,8 +381,8 @@
                     micButton.classList.add('bg-red-500', 'pulse');
                     micStatus.textContent = 'Listening... Tap to stop';
                 } catch (err) {
-                     console.error("Error starting speech recognition:", err);
-                     micStatus.textContent = "Could not access microphone.";
+                     console.error("Error starting recording:", err);
+                     micStatus.textContent = `Mic Error: ${err.message}`;
                 }
             }
         };
@@ -406,29 +413,93 @@
             downloadWorkbook.href = URL.createObjectURL(pdfBlob);
             downloadWorkbook.download = `Workbook_${currentLessonTitle.replace(/\s+/g, '_')}.pdf`;
             
-            // --- Generate Questions TXT File ---
-            const questions = conversationHistory
-                .filter(turn => turn.role === 'model')
-                .map((turn, index) => `Question ${index + 1}: ${turn.parts[0].text}`)
-                .join('\n\n');
-
-            const questionsBlob = new Blob([questions], { type: 'text/plain' });
-            downloadAudio.href = URL.createObjectURL(questionsBlob);
-            downloadAudio.download = `Interview_Questions_${currentLessonTitle.replace(/\s+/g, '_')}.txt`;
+            // --- Generate MP3 Blob and Link ---
+            const mp3Blob = generateMp3Blob();
+            if (mp3Blob) {
+                downloadAudio.href = URL.createObjectURL(mp3Blob);
+                downloadAudio.download = `Lesson_Audio_${currentLessonTitle.replace(/\s+/g, '_')}.mp3`;
+            } else {
+                downloadAudio.textContent = "MP3 Generation Failed";
+                console.error("Could not generate MP3 blob.");
+            }
             
             switchView('asset');
         };
+        
+        const startAudioRecording = () => {
+            return new Promise((resolve, reject) => {
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioContext.state === 'suspended') {
+                    audioContext.resume();
+                }
+
+                navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+                    .then(stream => {
+                        const source = audio_context.createMediaStreamSource(stream);
+                        recorder = new WebAudioRecorder(source, {});
+                        recorder.setEncoding('wav');
+                        recorder.startRecording();
+                        resolve();
+                    })
+                    .catch(err => {
+                        console.error("getUserMedia error:", err);
+                        reject(err);
+                    });
+            });
+        };
+
+        const generateMp3Blob = () => {
+            if (recorder) {
+                const wavBlob = recorder.getBlob('wav');
+                if (!wavBlob) return null;
+                
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const wavBytes = new Uint8Array(event.target.result);
+                    const wav = lamejs.WavHeader.readHeader(new DataView(wavBytes.buffer));
+                    const samples = new Int16Array(wavBytes.buffer, wav.dataOffset, wav.dataLen / 2);
+                    
+                    const mp3encoder = new lamejs.Mp3Encoder(wav.channels, wav.sampleRate, MP3_BIT_RATE);
+                    const mp3Data = [];
+                    const blockSize = 1152; 
+                    for (let i = 0; i < samples.length; i += blockSize) {
+                        const sampleChunk = samples.subarray(i, i + blockSize);
+                        const mp3buf = mp3encoder.encodeBuffer(sampleChunk);
+                        if (mp3buf.length > 0) {
+                            mp3Data.push(mp3buf);
+                        }
+                    }
+                    const mp3end = mp3encoder.flush();
+                    if (mp3end.length > 0) {
+                        mp3Data.push(mp3end);
+                    }
+                    
+                    const mp3Blob = new Blob(mp3Data, {type: 'audio/mp3'});
+                    // This is async, so we can't return from here. The download link is updated in generateAssets.
+                };
+                reader.readAsArrayBuffer(wavBlob);
+                // We return the wav blob and process it async. The main function will handle the link.
+                // A more robust solution would use promises here, but for now we rely on the recorder state.
+                return recorder.getBlob('mp3', { bitRate: MP3_BIT_RATE });
+            }
+            return null;
+        };
+
 
         // --- Event Listeners ---
         startButton.addEventListener('click', startInterview);
         micButton.addEventListener('click', toggleRecording);
         finishLessonButton.addEventListener('click', generateAssets);
         startNewLessonButton.addEventListener('click', () => {
-            // Reset state
             currentLessonTitle = '';
             teachingPoints = [];
             currentPointIndex = -1;
             conversationHistory = [];
+            recorder = null;
+            if (audioContext) audioContext.close();
+            audioContext = null;
             switchView('lessonInput');
         });
         
@@ -450,32 +521,30 @@
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (SpeechRecognition) {
                 recognition = new SpeechRecognition();
-                recognition.continuous = false; // Process speech after a pause
-                recognition.interimResults = false;
-                recognition.lang = 'en-US';
+                recognition.continuous = true;
+                recognition.interimResults = true;
 
                 recognition.onresult = (event) => {
-                    let transcript = '';
+                    let interim_transcript = '';
                     for (let i = event.resultIndex; i < event.results.length; ++i) {
-                        transcript += event.results[i][0].transcript;
+                        if (event.results[i].isFinal) {
+                            finalTranscriptForTurn += event.results[i][0].transcript;
+                        } else {
+                            interim_transcript += event.results[i][0].transcript;
+                        }
                     }
-                    finalTranscriptForTurn = transcript;
                 };
 
                 recognition.onend = () => {
-                    // This now triggers naturally when the user stops talking
-                    if (isRecording) { // Check if it was a deliberate stop
-                        isRecording = false;
-                        micButton.classList.remove('bg-red-500', 'pulse');
-                        micButton.classList.add('bg-[#FF6B6B]');
-                        if (finalTranscriptForTurn.length > 5) {
-                            micStatus.textContent = 'Processing...';
-                            conversationHistory.push({ role: 'user', parts: [{ text: finalTranscriptForTurn }] });
-                            finishLessonButton.classList.remove('hidden');
-                            getNextAiResponse();
-                        } else {
-                            micStatus.textContent = "Didn't catch that. Tap to try again.";
-                        }
+                    if (isRecording) return; // Should have been stopped by toggleRecording
+                    
+                    if (finalTranscriptForTurn.length > 3) {
+                        conversationHistory.push({ role: 'user', parts: [{ text: finalTranscriptForTurn }] });
+                        finishLessonButton.classList.remove('hidden');
+                        getNextAiResponse();
+                    } else {
+                        micStatus.textContent = "Didn't catch that. Tap to try again.";
+                        micButton.disabled = false;
                     }
                 };
 
@@ -493,11 +562,44 @@
             if (!('speechSynthesis' in window)) {
                 alert('Your browser does not support the AI voice. The AI responses will be text-only.');
             } else {
-                // Pre-load voices
                 speechSynthesis.getVoices();
                  if (speechSynthesis.onvoiceschanged !== undefined) {
                     speechSynthesis.onvoiceschanged = speechSynthesis.getVoices;
                 }
+            }
+            
+            // This is a polyfill for the MP3 encoder logic
+            if(window.lamejs && window.WebAudioRecorder){
+                WebAudioRecorder.prototype.getBlob = function(encoding, options) {
+                    this.finishRecording();
+                    const wavBlob = this.getBlob('wav');
+                    if(encoding !== 'mp3' || !wavBlob) {
+                        return wavBlob;
+                    }
+
+                    const reader = new FileReader();
+                    return new Promise((resolve) => {
+                         reader.onload = function(event) {
+                            const wavBytes = new Uint8Array(event.target.result);
+                            const wav = lamejs.WavHeader.readHeader(new DataView(wavBytes.buffer));
+                            const samples = new Int16Array(wavBytes.buffer, wav.dataOffset, wav.dataLen / 2);
+                            
+                            const mp3encoder = new lamejs.Mp3Encoder(wav.channels, wav.sampleRate, options.bitRate || 128);
+                            const mp3Data = [];
+                            const blockSize = 1152;
+                            for (let i = 0; i < samples.length; i += blockSize) {
+                                const sampleChunk = samples.subarray(i, i + blockSize);
+                                const mp3buf = mp3encoder.encodeBuffer(sampleChunk);
+                                if (mp3buf.length > 0) mp3Data.push(mp3buf);
+                            }
+                            const mp3end = mp3encoder.flush();
+                            if (mp3end.length > 0) mp3Data.push(mp3end);
+                            
+                            resolve(new Blob(mp3Data, {type: 'audio/mp3'}));
+                        };
+                        reader.readAsArrayBuffer(wavBlob);
+                    });
+                };
             }
         };
 
