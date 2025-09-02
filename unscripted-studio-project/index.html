@@ -414,7 +414,7 @@
             downloadWorkbook.download = `Workbook_${currentLessonTitle.replace(/\s+/g, '_')}.pdf`;
             
             // --- Generate MP3 Blob and Link ---
-            const mp3Blob = generateMp3Blob();
+            const mp3Blob = await generateMp3Blob(); // Changed to await
             if (mp3Blob) {
                 downloadAudio.href = URL.createObjectURL(mp3Blob);
                 downloadAudio.download = `Lesson_Audio_${currentLessonTitle.replace(/\s+/g, '_')}.mp3`;
@@ -437,7 +437,7 @@
 
                 navigator.mediaDevices.getUserMedia({ audio: true, video: false })
                     .then(stream => {
-                        const source = audio_context.createMediaStreamSource(stream);
+                        const source = audioContext.createMediaStreamSource(stream);
                         recorder = new WebAudioRecorder(source, {});
                         recorder.setEncoding('wav');
                         recorder.startRecording();
@@ -449,40 +449,12 @@
                     });
             });
         };
-
-        const generateMp3Blob = () => {
+        
+        // This function is now async to handle the promise from getBlob
+        const generateMp3Blob = async () => {
             if (recorder) {
-                const wavBlob = recorder.getBlob('wav');
-                if (!wavBlob) return null;
-                
-                const reader = new FileReader();
-                reader.onload = function(event) {
-                    const wavBytes = new Uint8Array(event.target.result);
-                    const wav = lamejs.WavHeader.readHeader(new DataView(wavBytes.buffer));
-                    const samples = new Int16Array(wavBytes.buffer, wav.dataOffset, wav.dataLen / 2);
-                    
-                    const mp3encoder = new lamejs.Mp3Encoder(wav.channels, wav.sampleRate, MP3_BIT_RATE);
-                    const mp3Data = [];
-                    const blockSize = 1152; 
-                    for (let i = 0; i < samples.length; i += blockSize) {
-                        const sampleChunk = samples.subarray(i, i + blockSize);
-                        const mp3buf = mp3encoder.encodeBuffer(sampleChunk);
-                        if (mp3buf.length > 0) {
-                            mp3Data.push(mp3buf);
-                        }
-                    }
-                    const mp3end = mp3encoder.flush();
-                    if (mp3end.length > 0) {
-                        mp3Data.push(mp3end);
-                    }
-                    
-                    const mp3Blob = new Blob(mp3Data, {type: 'audio/mp3'});
-                    // This is async, so we can't return from here. The download link is updated in generateAssets.
-                };
-                reader.readAsArrayBuffer(wavBlob);
-                // We return the wav blob and process it async. The main function will handle the link.
-                // A more robust solution would use promises here, but for now we rely on the recorder state.
-                return recorder.getBlob('mp3', { bitRate: MP3_BIT_RATE });
+                // The polyfill makes getBlob return a promise for MP3
+                return await recorder.getBlob('mp3', { bitRate: MP3_BIT_RATE });
             }
             return null;
         };
@@ -498,7 +470,9 @@
             currentPointIndex = -1;
             conversationHistory = [];
             recorder = null;
-            if (audioContext) audioContext.close();
+            if (audioContext && audioContext.state !== 'closed') {
+                audioContext.close();
+            }
             audioContext = null;
             switchView('lessonInput');
         });
@@ -521,22 +495,28 @@
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (SpeechRecognition) {
                 recognition = new SpeechRecognition();
-                recognition.continuous = true;
+                recognition.continuous = true; // Let it run until manually stopped
                 recognition.interimResults = true;
 
                 recognition.onresult = (event) => {
+                    let final_transcript = '';
                     let interim_transcript = '';
                     for (let i = event.resultIndex; i < event.results.length; ++i) {
                         if (event.results[i].isFinal) {
-                            finalTranscriptForTurn += event.results[i][0].transcript;
+                            final_transcript += event.results[i][0].transcript;
                         } else {
                             interim_transcript += event.results[i][0].transcript;
                         }
                     }
+                    finalTranscriptForTurn = final_transcript; // Update final transcript as it comes
                 };
 
                 recognition.onend = () => {
-                    if (isRecording) return; // Should have been stopped by toggleRecording
+                    if (isRecording) { // If it stops unexpectedly, restart it
+                       console.log("Recognition stopped unexpectedly, restarting.");
+                       recognition.start();
+                       return;
+                    }
                     
                     if (finalTranscriptForTurn.length > 3) {
                         conversationHistory.push({ role: 'user', parts: [{ text: finalTranscriptForTurn }] });
@@ -577,8 +557,9 @@
                         return wavBlob;
                     }
 
-                    const reader = new FileReader();
+                    // This returns a promise that resolves with the MP3 blob
                     return new Promise((resolve) => {
+                         const reader = new FileReader();
                          reader.onload = function(event) {
                             const wavBytes = new Uint8Array(event.target.result);
                             const wav = lamejs.WavHeader.readHeader(new DataView(wavBytes.buffer));
