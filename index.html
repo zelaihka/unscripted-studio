@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unscripted Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <!-- Robust library loading for MP3 encoder -->
+    <script>
+        let lamejsLoaded = false;
+        function libraryLoaded() {
+            console.log("LameJS MP3 encoder loaded successfully.");
+            lamejsLoaded = true;
+            document.addEventListener('DOMContentLoaded', init);
+        }
+
+        function libraryFailed() {
+            console.error("A critical audio library (lame.min.js) failed to load.");
+            document.addEventListener('DOMContentLoaded', () => {
+                const startButton = document.getElementById('start-button');
+                alert("The MP3 audio encoder failed to load. Please check your network connection and refresh the page.");
+                if (startButton) {
+                    startButton.disabled = true;
+                    startButton.textContent = "Audio Encoder Failed to Load";
+                    startButton.classList.remove('main-cta');
+                    startButton.classList.add('bg-gray-400', 'cursor-not-allowed');
+                }
+            });
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js" onload="libraryLoaded()" onerror="libraryFailed()" defer></script>
+
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #FDF9F6;
+            color: #4A4A4A;
+        }
+        .main-cta {
+            background-color: #FF6B6B;
+            color: white;
+            transition: background-color 0.3s ease;
+        }
+        .main-cta:hover {
+            background-color: #e05a5a;
+        }
+        .pulse {
+            animation: pulse-animation 1.5s infinite;
+        }
+        @keyframes pulse-animation {
+            0% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(255, 107, 107, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0); }
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div class="container mx-auto px-4 py-8 md:py-12">
+
+        <!-- Header -->
+        <header class="text-center mb-16">
+            <h1 class="text-3xl font-bold text-[#FF6B6B]">Unscripted Studio</h1>
+        </header>
+
+        <!-- Hero Section -->
+        <section class="w-full max-w-6xl mx-auto grid grid-cols-1 items-center gap-8 md:gap-16 my-16 md:my-24">
+            <div class="text-center">
+                <h2 class="text-4xl md:text-6xl font-bold text-gray-800 leading-tight">Turn Your Expertise Into Course Magic</h2>
+                <p class="mt-4 text-lg text-gray-600 max-w-3xl mx-auto">I'm your supportive AI podcast host who interviews you lesson-by-lesson, helping you create polished course content without the overwhelm. Just talk it out with me!</p>
+                <button id="scroll-to-app-button" class="mt-8 main-cta font-bold py-3 px-8 rounded-full">
+                    Start Your Interview
+                </button>
+            </div>
+        </section>
+
+         <!-- How It Works Section -->
+        <section class="w-full max-w-5xl mx-auto my-16 md:my-24 text-center">
+            <h2 class="text-3xl font-bold text-gray-800">How It Works</h2>
+            <p class="text-gray-600 mt-2">Three simple steps to bring your course to life.</p>
+
+            <div class="mt-12 grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 text-left">
+                <!-- Step 1 -->
+                <div class="bg-white p-6 rounded-2xl shadow-lg">
+                    <div class="text-3xl font-bold text-[#FF6B6B]">1.</div>
+                    <h3 class="font-bold text-xl mt-2 text-gray-800">Describe Your Lesson</h3>
+                    <p class="text-gray-600 mt-2">Enter your lesson title and the key teaching points you want to cover.</p>
+                </div>
+                <!-- Step 2 -->
+                <div class="bg-white p-6 rounded-2xl shadow-lg">
+                    <div class="text-3xl font-bold text-[#FF6B6B]">2.</div>
+                    <h3 class="font-bold text-xl mt-2 text-gray-800">Chat It Out With Me</h3>
+                    <p class="text-gray-600 mt-2">I'll guide you through each point with encouraging questions to bring your content to life.</p>
+                </div>
+                <!-- Step 3 -->
+                <div class="bg-white p-6 rounded-2xl shadow-lg">
+                    <div class="text-3xl font-bold text-[#FF6B6B]">3.</div>
+                    <h3 class="font-bold text-xl mt-2 text-gray-800">Export & Polish</h3>
+                    <p class="text-gray-600 mt-2">Get your audio file and an auto-generated workbook outline, ready to be polished.</p>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- Main App Area -->
+        <div id="app-container" class="w-full max-w-2xl mx-auto mt-12 scroll-mt-24">
+
+            <!-- Lesson Input View -->
+            <main id="lesson-input-view" class="w-full">
+                <div class="bg-white rounded-2xl p-6 md:p-8 shadow-xl">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">Describe Your Lesson</h3>
+                    <div class="space-y-4">
+                        <input type="text" id="lesson-title-input" class="w-full bg-gray-50 border border-gray-300 rounded-lg p-3 text-gray-800 placeholder-gray-400 focus:ring-2 focus:ring-[#FF6B6B] focus:border-transparent transition" placeholder="Enter Lesson Title">
+                        <div>
+                             <textarea id="teaching-points-input" class="w-full h-36 bg-gray-50 border border-gray-300 rounded-lg p-3 text-gray-800 placeholder-gray-400 focus:ring-2 focus:ring-[#FF6B6B] focus:border-transparent transition" placeholder="Enter the key teaching points...&#10;- The importance of X&#10;- How to implement Y&#10;- Common mistakes with Z"></textarea>
+                            <p class="text-xs text-gray-500 text-left mt-2 ml-1">Please put each teaching point on its own line.</p>
+                        </div>
+                    </div>
+                    <button id="start-button" class="mt-6 w-full main-cta font-bold py-3 px-6 rounded-full">
+                        Start Interview
+                    </button>
+                </div>
+            </main>
+
+            <!-- Interview View -->
+            <main id="interview-view" class="w-full max-w-lg mx-auto text-center hidden">
+                <h2 id="interview-title" class="text-2xl font-bold text-gray-800"></h2>
+                <p id="current-teaching-point" class="text-gray-600 mt-1 mb-6"></p>
+
+                <div id="ai-response" class="my-6 text-gray-800 text-lg leading-relaxed">Let's get started!</div>
+
+                <div id="recording-controls" class="mt-8">
+                    <button id="mic-button" class="w-20 h-20 bg-[#FF6B6B] hover:bg-[#e05a5a] rounded-full flex items-center justify-center mx-auto transition-all shadow-lg">
+                        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
+                    </button>
+                    <p id="mic-status" class="mt-4 text-gray-500 text-sm">Tap to speak</p>
+                </div>
+                
+                <button id="pro-tips-button" class="mt-6 text-sm text-gray-500 hover:text-[#FF6B6B] transition">Pro Tips for Best Audio</button>
+
+                <div class="mt-8">
+                    <button id="finish-lesson-button" class="hidden main-cta font-bold py-3 px-8 rounded-full">
+                        Finish Lesson & Get Assets
+                    </button>
+                </div>
+            </main>
+
+            <!-- Asset Download View -->
+            <main id="asset-view" class="w-full text-center hidden">
+                 <div class="bg-white rounded-2xl p-6 md:p-8 shadow-xl">
+                    <h2 class="text-2xl font-bold text-gray-800">Lesson Complete!</h2>
+                    <p class="text-gray-500 mb-6">Download your assets for this lesson below.</p>
+
+                    <div class="space-y-4">
+                        <a id="download-audio" class="block w-full bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-lg transition-colors">Download Audio File (.mp3)</a>
+                        <a id="download-workbook" class="block w-full bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-lg transition-colors">Download Workbook (.pdf)</a>
+                    </div>
+                    
+                    <div class="mt-8 border-t pt-6">
+                         <button id="start-new-lesson-button" class="w-full main-cta font-bold py-3 px-6 rounded-full">
+                            Start Next Lesson
+                        </button>
+                    </div>
+                 </div>
+            </main>
+            
+            <!-- Loader -->
+            <div id="loader" class="hidden text-center py-12">
+                 <svg class="animate-spin h-8 w-8 text-[#FF6B6B] mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <p class="mt-4 text-gray-600">Generating your assets...</p>
+            </div>
+
+        </div>
+    </div>
+    
+    <!-- Pro Tips Modal -->
+    <div id="pro-tips-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl p-6 md:p-8 max-w-lg w-full relative">
+            <button id="close-modal-button" class="absolute top-4 right-4 text-gray-400 hover:text-gray-800">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            <h3 class="text-xl font-bold text-gray-800 mb-4">Pro Tips for Best Audio</h3>
+            <div class="text-gray-600 space-y-3">
+                <p><strong>1. Use an External Mic:</strong> A simple USB mic or earbuds is a huge upgrade over your computer's built-in mic.</p>
+                <p><strong>2. Wear Headphones:</strong> This prevents the AI's voice from echoing into your recording.</p>
+                <p><strong>3. Find a Quiet Space:</strong> Close doors and windows. Turn off fans, ACs, and other noisy devices.</p>
+                <p><strong>4. Reduce Echo:</strong> Record in a room with soft surfaces like carpets, curtains, or even a closet to absorb sound.</p>
+                <p><strong>5. Mind Mic Position:</strong> Place the mic a few inches from your mouth and speak clearly at a consistent volume.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const lessonInputView = document.getElementById('lesson-input-view');
+        const interviewView = document.getElementById('interview-view');
+        const assetView = document.getElementById('asset-view');
+        const loader = document.getElementById('loader');
+
+        const lessonTitleInput = document.getElementById('lesson-title-input');
+        const teachingPointsInput = document.getElementById('teaching-points-input');
+        const startButton = document.getElementById('start-button');
+        const scrollToAppButton = document.getElementById('scroll-to-app-button');
+
+        const interviewTitle = document.getElementById('interview-title');
+        const currentTeachingPoint = document.getElementById('current-teaching-point');
+        const aiResponse = document.getElementById('ai-response');
+        const micButton = document.getElementById('mic-button');
+        const micStatus = document.getElementById('mic-status');
+        const finishLessonButton = document.getElementById('finish-lesson-button');
+        
+        const downloadAudio = document.getElementById('download-audio');
+        const downloadWorkbook = document.getElementById('download-workbook');
+        const startNewLessonButton = document.getElementById('start-new-lesson-button');
+        
+        const proTipsButton = document.getElementById('pro-tips-button');
+        const proTipsModal = document.getElementById('pro-tips-modal');
+        const closeModalButton = document.getElementById('close-modal-button');
+
+        // --- App State ---
+        let currentLessonTitle = '';
+        let teachingPoints = [];
+        let currentPointIndex = -1;
+        let conversationHistory = [];
+        let isRecording = false;
+        let recognition;
+        let finalTranscriptForTurn = '';
+        
+        // --- Audio Recording State ---
+        let mediaRecorder;
+        let audioChunks = [];
+        const MP3_BIT_RATE = 128;
+
+        // --- Core Functions ---
+        const switchView = (view) => {
+            lessonInputView.classList.add('hidden');
+            interviewView.classList.add('hidden');
+            assetView.classList.add('hidden');
+            loader.classList.add('hidden');
+
+            if (view === 'lessonInput') lessonInputView.classList.remove('hidden');
+            else if (view === 'interview') interviewView.classList.remove('hidden');
+            else if (view === 'asset') assetView.classList.remove('hidden');
+            else if (view === 'loader') loader.classList.remove('hidden');
+        };
+
+        async function callGeminiAPI(history, systemPrompt) {
+            const apiUrl = "/.netlify/functions/gemini-proxy"; 
+
+            const payload = {
+                contents: history,
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                },
+            };
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorBody = await response.text();
+                    throw new Error(`API call failed with status: ${response.status}. Body: ${errorBody}`);
+                }
+
+                const result = await response.json();
+                const candidate = result.candidates?.[0];
+                if (candidate && candidate.content?.parts?.[0]?.text) {
+                    return candidate.content.parts[0].text;
+                } else {
+                    console.error("Unexpected API response structure:", result);
+                    return "Sorry, I encountered an issue. Please try again.";
+                }
+            } catch (error) {
+                console.error("Error calling Gemini API:", error);
+                micStatus.textContent = "Error communicating with AI. Check console.";
+                return "I seem to be having trouble connecting. Please check your setup.";
+            }
+        }
+        
+        const speak = (text, onEndCallback = () => {}) => {
+            if (!('speechSynthesis' in window)) {
+                aiResponse.textContent = text;
+                onEndCallback();
+                return;
+            }
+            
+            aiResponse.textContent = text;
+            const utterance = new SpeechSynthesisUtterance(text);
+            
+            let voices = speechSynthesis.getVoices();
+            if (voices.length === 0) {
+                speechSynthesis.onvoiceschanged = () => {
+                    voices = speechSynthesis.getVoices();
+                    setupAndSpeak();
+                }
+            } else {
+                setupAndSpeak();
+            }
+
+            function setupAndSpeak() {
+                let selectedVoice = voices.find(voice => voice.name.includes('Google') && voice.name.includes('Female') && voice.lang.startsWith('en'));
+                if (!selectedVoice) selectedVoice = voices.find(voice => voice.name.includes('Female') && voice.lang.startsWith('en'));
+                if (!selectedVoice) selectedVoice = voices.find(voice => voice.lang.startsWith('en-US'));
+
+                if (selectedVoice) utterance.voice = selectedVoice;
+                
+                utterance.rate = 0.95;
+                utterance.pitch = 1.0;
+                utterance.onend = onEndCallback;
+                
+                window.speechSynthesis.cancel();
+                window.speechSynthesis.speak(utterance);
+            }
+        };
+
+        const startInterview = () => {
+            currentLessonTitle = lessonTitleInput.value.trim();
+            teachingPoints = teachingPointsInput.value.split('\n').map(p => p.trim()).filter(p => p.length > 0);
+
+            if (!currentLessonTitle || teachingPoints.length === 0) {
+                alert('Please provide a lesson title and at least one teaching point.');
+                return;
+            }
+
+            interviewTitle.textContent = `Lesson: ${currentLessonTitle}`;
+            currentPointIndex = 0;
+            displayCurrentTeachingPoint();
+            
+            conversationHistory = [{
+                role: 'user',
+                parts: [{ text: `Let's start the lesson titled "${currentLessonTitle}". The teaching points are: ${teachingPoints.join(', ')}.` }]
+            }];
+
+            switchView('interview');
+            
+            const firstQuestion = `Great! Let's dive into your first point: "${teachingPoints[0]}". To start, can you explain this concept in your own words?`;
+            conversationHistory.push({ role: 'model', parts: [{ text: firstQuestion }] });
+            speak(firstQuestion, () => {
+                 micButton.disabled = false;
+                 micStatus.textContent = 'Tap to speak';
+            });
+        };
+        
+        const displayCurrentTeachingPoint = () => {
+             if(currentPointIndex < teachingPoints.length) {
+                currentTeachingPoint.textContent = `Current Point: ${teachingPoints[currentPointIndex]}`;
+            } else {
+                currentTeachingPoint.textContent = "You've covered all your points!";
+            }
+        };
+
+        const getNextAiResponse = async () => {
+            micButton.disabled = true;
+            micStatus.textContent = 'Aria is thinking...';
+            
+            const systemPrompt = "You are Aria, an expert and empathetic interviewer. The creator is talking through their lesson's teaching points. Your primary goal is to help them expand on the CURRENT teaching point. Based on their last response, ask an insightful follow-up question that prompts them to provide examples, explain further, or illustrate their point better. Do NOT move to the next teaching point until you have explored the current one. Once a point seems thoroughly covered, you can introduce the next one by saying something like: 'That's a great explanation. Let's move to our next point: [Next Point]. Can you tell me about that?'. If all points are covered, guide them to conclude. Keep questions concise (1-2 sentences).";
+            
+            const question = await callGeminiAPI(conversationHistory, systemPrompt);
+            conversationHistory.push({ role: 'model', parts: [{ text: question }] });
+
+            speak(question, () => {
+                micButton.disabled = false;
+                micStatus.textContent = 'Tap to speak';
+                if (teachingPoints[currentPointIndex + 1] && question.toLowerCase().includes(teachingPoints[currentPointIndex + 1].toLowerCase().substring(0, 10))) {
+                    currentPointIndex++;
+                    displayCurrentTeachingPoint();
+                }
+            });
+        };
+
+        const toggleRecording = async () => {
+            if (isRecording) {
+                // --- STOPPING ---
+                isRecording = false;
+                recognition.stop();
+                mediaRecorder.stop();
+                
+                micButton.classList.remove('bg-red-500', 'pulse');
+                micButton.classList.add('bg-[#FF6B6B]');
+                micStatus.textContent = 'Processing...';
+
+            } else {
+                // --- STARTING ---
+                try {
+                    await startAudioRecording();
+                    finalTranscriptForTurn = '';
+                    recognition.start();
+                    isRecording = true;
+                    micButton.classList.remove('bg-[#FF6B6B]');
+                    micButton.classList.add('bg-red-500', 'pulse');
+                    micStatus.textContent = 'Listening... Tap to stop';
+                } catch (err) {
+                     console.error("Error starting recording:", err);
+                     micStatus.textContent = `Mic Error: ${err.message}`;
+                }
+            }
+        };
+
+        const generateAssets = async () => {
+            switchView('loader');
+            const fullTranscript = conversationHistory
+                .filter(turn => turn.role === 'user' && !turn.parts[0].text.includes("teaching points:"))
+                .map(turn => turn.parts[0].text)
+                .join('\n\n');
+
+            const systemPrompt = "You are an expert instructional designer. Your task is to take a raw transcript from a course creator and structure it into a simple, clear workbook outline for students. The tone should be helpful and direct. The output should be plain text and include these sections with these exact headings: 'Lesson Summary:', 'Key Concepts:', 'Key Takeaways:', and 'Action Steps:'. Under Key Concepts, define important terms. Under Key Takeaways, use bullet points. Under Action Steps, provide two engaging, reflective questions for the student.";
+            const userPrompt = `Based on the following transcript for the lesson titled '${currentLessonTitle}', generate a concise workbook outline. Transcript: "${fullTranscript}"`;
+
+            const workbookContent = await callGeminiAPI([{role: 'user', parts: [{text: userPrompt}]}], systemPrompt);
+
+            // --- Generate Workbook PDF ---
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.setFont("Poppins", "normal");
+            doc.setTextColor("#4A4A4A");
+            doc.setFontSize(18);
+            doc.text(currentLessonTitle, 14, 22);
+            doc.setFontSize(11);
+            const splitText = doc.splitTextToSize(workbookContent, 180);
+            doc.text(splitText, 14, 32);
+            const pdfBlob = doc.output('blob');
+            downloadWorkbook.href = URL.createObjectURL(pdfBlob);
+            downloadWorkbook.download = `Workbook_${currentLessonTitle.replace(/\s+/g, '_')}.pdf`;
+            
+            // --- Generate MP3 Blob and Link ---
+            const mp3Blob = await encodeToMp3(new Blob(audioChunks, { type: 'audio/webm' }));
+            if (mp3Blob) {
+                downloadAudio.href = URL.createObjectURL(mp3Blob);
+                downloadAudio.download = `Lesson_Audio_${currentLessonTitle.replace(/\s+/g, '_')}.mp3`;
+            } else {
+                downloadAudio.textContent = "MP3 Generation Failed";
+                console.error("Could not generate MP3 blob.");
+            }
+            
+            switchView('asset');
+        };
+        
+        const startAudioRecording = () => {
+            return new Promise((resolve, reject) => {
+                 navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+                    .then(stream => {
+                        mediaRecorder = new MediaRecorder(stream);
+                        mediaRecorder.start();
+
+                        mediaRecorder.ondataavailable = event => {
+                            audioChunks.push(event.data);
+                        };
+                        
+                        resolve();
+                    })
+                    .catch(err => {
+                        console.error("getUserMedia error:", err);
+                        reject(err);
+                    });
+            });
+        };
+        
+        async function encodeToMp3(audioBlob) {
+            if (!lamejsLoaded) {
+                console.error("LameJS not loaded, cannot encode MP3.");
+                return null;
+            }
+
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const fileReader = new FileReader();
+
+            return new Promise((resolve) => {
+                fileReader.onloadend = () => {
+                    const arrayBuffer = fileReader.result;
+                    audioContext.decodeAudioData(arrayBuffer, (audioBuffer) => {
+                        const samples = audioBuffer.getChannelData(0);
+                        const sampleRate = audioBuffer.sampleRate;
+                        
+                        const mp3encoder = new lamejs.Mp3Encoder(1, sampleRate, MP3_BIT_RATE);
+                        const mp3Data = [];
+                        
+                        const samples16 = new Int16Array(samples.length);
+                        for (let i = 0; i < samples.length; i++) {
+                            samples16[i] = samples[i] * 32767;
+                        }
+
+                        const blockSize = 1152;
+                        for (let i = 0; i < samples16.length; i += blockSize) {
+                            const sampleChunk = samples16.subarray(i, i + blockSize);
+                            const mp3buf = mp3encoder.encodeBuffer(sampleChunk);
+                            if (mp3buf.length > 0) mp3Data.push(mp3buf);
+                        }
+                        const mp3end = mp3encoder.flush();
+                        if (mp3end.length > 0) mp3Data.push(mp3end);
+                        
+                        resolve(new Blob(mp3Data, {type: 'audio/mp3'}));
+                    });
+                };
+                fileReader.readAsArrayBuffer(audioBlob);
+            });
+        }
+
+
+        // --- Event Listeners ---
+        startButton.addEventListener('click', startInterview);
+        micButton.addEventListener('click', toggleRecording);
+        finishLessonButton.addEventListener('click', generateAssets);
+        startNewLessonButton.addEventListener('click', () => {
+            currentLessonTitle = '';
+            teachingPoints = [];
+            currentPointIndex = -1;
+            conversationHistory = [];
+            audioChunks = [];
+            mediaRecorder = null;
+            switchView('lessonInput');
+        });
+        
+        scrollToAppButton.addEventListener('click', () => {
+            document.getElementById('app-container').scrollIntoView({ behavior: 'smooth' });
+        });
+        
+        proTipsButton.addEventListener('click', () => {
+            proTipsModal.classList.remove('hidden');
+            proTipsModal.classList.add('flex');
+        });
+        closeModalButton.addEventListener('click', () => {
+            proTipsModal.classList.add('hidden');
+            proTipsModal.classList.remove('flex');
+        });
+        
+        // --- Initializer ---
+        const init = () => {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (SpeechRecognition) {
+                recognition = new SpeechRecognition();
+                recognition.continuous = true;
+                recognition.interimResults = true;
+
+                recognition.onstart = () => {
+                    isRecording = true;
+                };
+
+                recognition.onresult = (event) => {
+                    let final_transcript = '';
+                    for (let i = event.resultIndex; i < event.results.length; ++i) {
+                        if (event.results[i].isFinal) {
+                            final_transcript += event.results[i][0].transcript;
+                        }
+                    }
+                    if (final_transcript) {
+                       finalTranscriptForTurn = final_transcript;
+                    }
+                };
+
+                recognition.onend = () => {
+                    if (!isRecording) { // If stopped via toggleRecording
+                        if (finalTranscriptForTurn.length > 3) {
+                            conversationHistory.push({ role: 'user', parts: [{ text: finalTranscriptForTurn }] });
+                            finishLessonButton.classList.remove('hidden');
+                            getNextAiResponse();
+                        } else {
+                            micStatus.textContent = "Didn't catch that. Tap to try again.";
+                            micButton.disabled = false;
+                        }
+                    }
+                };
+
+                recognition.onerror = (event) => {
+                    console.error("Speech recognition error:", event.error);
+                    micStatus.textContent = `Mic Error: ${event.error}`;
+                    isRecording = false;
+                    micButton.classList.remove('bg-red-500', 'pulse');
+                    micButton.classList.add('bg-[#FF6B6B]');
+                };
+            } else {
+                 alert('Your browser does not support speech-to-text. Please use a modern browser like Chrome or Firefox.');
+            }
+
+            if (!('speechSynthesis' in window)) {
+                alert('Your browser does not support the AI voice. The AI responses will be text-only.');
+            } else {
+                speechSynthesis.getVoices();
+                 if (speechSynthesis.onvoiceschanged !== undefined) {
+                    speechSynthesis.onvoiceschanged = speechSynthesis.getVoices;
+                }
+            }
+        };
+    </script>
+</body>
+</html>
+
