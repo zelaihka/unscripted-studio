@@ -9,6 +9,28 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <!-- Robust loading for the MP3 Encoder library -->
+    <script>
+        function onLibraryLoad() {
+            console.log("LameJS MP3 encoder loaded successfully.");
+            document.addEventListener('DOMContentLoaded', init);
+        }
+        function onLibraryError() {
+            console.error("A critical audio library (lame.min.js) failed to load.");
+            document.addEventListener('DOMContentLoaded', () => {
+                const startButton = document.getElementById('start-button');
+                alert("The MP3 audio encoder failed to load. Please check your network connection and refresh the page.");
+                if (startButton) {
+                    startButton.disabled = true;
+                    startButton.textContent = "Audio Encoder Failed to Load";
+                    startButton.classList.remove('main-cta');
+                    startButton.classList.add('bg-gray-400', 'cursor-not-allowed');
+                }
+            });
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js" onload="onLibraryLoad()" onerror="onLibraryError()" defer></script>
 
     <style>
         body {
@@ -172,14 +194,6 @@
             </div>
         </div>
     </div>
-
-    <!-- Inlined Audio Libraries -->
-    <script>
-        // Inlined WebAudioRecorder.js - v0.3.1 (Clean Version)
-        !function(e){"use strict";"function"!=typeof e.CustomEvent&&(e.CustomEvent=function(e,t){t=t||{bubbles:!1,cancelable:!1,detail:void 0};var n=document.createEvent("CustomEvent");return n.initCustomEvent(e,t.bubbles,t.cancelable,t.detail),n},e.CustomEvent.prototype=e.Event.prototype),e.WebAudioRecorder=function(t,n){function i(e,n){for(var i in n)e.hasOwnProperty(i)||(e[i]=n[i])}function o(e){try{var t=new Blob(["self.onmessage=",e.toString()],{type:"application/javascript"});return new Worker(URL.createObjectURL(t))}catch(e){return new Worker(n.workerPath)}}function r(e){var t=e.length,n=new Float32Array(t);for(var i=0;i<t;i++)n[i]=e[i];return n}function a(e){for(var t=[],n=0;n<e.length;n++)t.push(r(e[n]));return t}var s,c=this,u=t.context;n=n||{},i(n,{workerPath:"WebAudioRecorder.worker.min.js",numChannels:1,encoding:"wav",options:{wav:{mimeType:"audio/wav"},ogg:{mimeType:"audio/ogg",quality:.5},mp3:{mimeType:"audio/mp3",bitRate:160}}}),WebAudioRecorder.encoder=function(e){var t,n,i,o,r,a,s;self.onmessage=function(e){var c=e.data;switch(c.command){case"start":n=(i=c.config).sampleRate,t=i.numChannels,s=i.options,a=i.encoding,r=new lamejs.Mp3Encoder(t,n,s[a].bitRate),o=[];break;case"data":o.push.apply(o,c.data);break;case"end":self.postMessage({command:"end",data:r.flush()});break;case"error":self.close()}}},this.worker=o(WebAudioRecorder.encoder),this.worker.onmessage=function(e){var t=e.data;switch(t.command){case"data":c.ondataavailable&&c.ondataavailable(t.data);break;case"end":c.onstop&&c.onstop(t.data),c.onstop=null;break;case"error":c.onerror&&c.onerror(t.data)}},this.ondataavailable=null,this.onstop=null,this.onerror=null,this.isRecording=!1,this.start=function(){c.isRecording||(s=u.createScriptProcessor(4096,n.numChannels,n.numChannels),t.connect(s),s.connect(u.destination),s.onaudioprocess=function(e){c.isRecording&&c.worker.postMessage({command:"data",data:a(function(e,t){for(var n=[],i=0;i<t;i++)n.push(e.getChannelData(i));return n}(e.inputBuffer,n.numChannels))})},c.worker.postMessage({command:"start",config:{sampleRate:u.sampleRate,numChannels:n.numChannels,encoding:n.encoding,options:n.options}}),c.isRecording=!0)},this.stop=function(){c.isRecording&&(s.disconnect(),t.disconnect(),c.worker.postMessage({command:"end"}),c.isRecording=!1)},this.setEncoding=function(e){c.isRecording||(n.encoding=e)},this.setOptions=function(e){c.isRecording||i(n.options,e)}}}("undefined"!=typeof window?window:this);
-        // Inlined lame.min.js - v1.2.1 (Clean Version)
-        var lamejs=function(e){"use strict";function t(e,t,r){this.channels=e,this.samplerate=r,this.bitrate=t,this.encoder=new lamejs.Lame(r,e,t,5),this.inSamples=new Int16Array(1152),this.outBuffer=new Int8Array(4096)}return t.prototype.encodeBuffer=function(e){for(var t=[],r=0;r<e.length;r+=1152){var n=e.subarray(r,r+1152),i=this.encoder.encode(n),s=new Int8Array(i);t.push(s)}return new Blob(t,{type:"audio/mp3"})},t.prototype.flush=function(){var e=this.encoder.flush();return new Blob([new Int8Array(e)],{type:"audio/mp3"})},t}();
-    </script>
     
     <script>
         // --- DOM Elements ---
@@ -215,13 +229,11 @@
         let conversationHistory = [];
         let isRecording = false;
         let recognition;
-        let finalTranscriptForTurn = '';
         
         // --- Audio Recording State ---
-        let recorder;
-        let audioContext;
+        let mediaRecorder;
+        let audioChunks = [];
         const MP3_BIT_RATE = 128;
-        let audioBlob; // Will hold the final audio blob after recording stops
 
         // --- Core Functions ---
         const switchView = (view) => {
@@ -364,21 +376,12 @@
             });
         };
 
-        const toggleRecording = async () => {
-            if (isRecording) {
-                // --- STOPPING ---
-                recognition.stop();
-                if (recorder) recorder.stop();
-                isRecording = false;
-                micButton.classList.remove('bg-red-500', 'pulse');
-                micButton.classList.add('bg-[#FF6B6B]');
-                micStatus.textContent = 'Processing...';
-
-            } else {
-                // --- STARTING ---
-                try {
+        const handleRecording = async () => {
+            // This function now only has one job: start the recording process.
+            // The speech recognition's 'onend' and 'onresult' events handle stopping.
+            if (!isRecording) {
+                 try {
                     await startAudioRecording();
-                    finalTranscriptForTurn = '';
                     recognition.start();
                 } catch (err) {
                      console.error("Error starting recording:", err);
@@ -414,12 +417,14 @@
             downloadWorkbook.download = `Workbook_${currentLessonTitle.replace(/\s+/g, '_')}.pdf`;
             
             // --- Generate MP3 Blob and Link ---
-            if (audioBlob) {
-                downloadAudio.href = URL.createObjectURL(audioBlob);
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            const mp3Blob = await encodeToMp3(audioBlob);
+            if (mp3Blob) {
+                downloadAudio.href = URL.createObjectURL(mp3Blob);
                 downloadAudio.download = `Lesson_Audio_${currentLessonTitle.replace(/\s+/g, '_')}.mp3`;
             } else {
                 downloadAudio.textContent = "MP3 Generation Failed";
-                console.error("Could not generate MP3 blob because audioBlob is not available.");
+                console.error("Could not generate MP3 blob.");
             }
             
             switchView('asset');
@@ -427,29 +432,16 @@
         
         const startAudioRecording = () => {
             return new Promise((resolve, reject) => {
-                if (!audioContext) {
-                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                }
-                if (audioContext.state === 'suspended') {
-                    audioContext.resume();
-                }
-
-                navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+                 navigator.mediaDevices.getUserMedia({ audio: true, video: false })
                     .then(stream => {
-                        const source = audioContext.createMediaStreamSource(stream);
-                        // FIX: Use recorder.start() instead of recorder.startRecording()
-                        recorder = new window.WebAudioRecorder(source, { workerPath: 'https://cdn.jsdelivr.net/npm/webaudiorecorder@0.3.1/lib/WebAudioRecorder.worker.min.js' });
-                        recorder.setEncoding('mp3');
-                        recorder.setOptions({ mp3: { bitRate: MP3_BIT_RATE } });
-                        
-                        recorder.onComplete = (rec, blob) => {
-                            audioBlob = blob;
-                        };
-                        recorder.onError = (rec, err) => {
-                            console.error("Recorder error:", err);
-                        }
+                        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                        audioChunks = []; // Clear previous recording chunks
+                        mediaRecorder.start();
 
-                        recorder.start();
+                        mediaRecorder.ondataavailable = event => {
+                            audioChunks.push(event.data);
+                        };
+                        
                         resolve();
                     })
                     .catch(err => {
@@ -458,22 +450,61 @@
                     });
             });
         };
+        
+        async function encodeToMp3(audioBlob) {
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const fileReader = new FileReader();
+
+                return new Promise((resolve, reject) => {
+                    fileReader.onloadend = () => {
+                        const arrayBuffer = fileReader.result;
+                        audioContext.decodeAudioData(arrayBuffer, (audioBuffer) => {
+                            const samples = audioBuffer.getChannelData(0);
+                            const sampleRate = audioBuffer.sampleRate;
+                            
+                            const mp3encoder = new lamejs.Mp3Encoder(1, sampleRate, MP3_BIT_RATE);
+                            const mp3Data = [];
+                            
+                            const samples16 = new Int16Array(samples.length);
+                            for (let i = 0; i < samples.length; i++) {
+                                samples16[i] = samples[i] * 32767;
+                            }
+
+                            const blockSize = 1152;
+                            for (let i = 0; i < samples16.length; i += blockSize) {
+                                const sampleChunk = samples16.subarray(i, i + blockSize);
+                                const mp3buf = mp3encoder.encodeBuffer(sampleChunk);
+                                if (mp3buf.length > 0) mp3Data.push(mp3buf);
+                            }
+                            const mp3end = mp3encoder.flush();
+                            if (mp3end.length > 0) mp3Data.push(mp3end);
+                            
+                            resolve(new Blob(mp3Data, {type: 'audio/mp3'}));
+                        }, (err) => {
+                            console.error("Error decoding audio data:", err);
+                            reject(err);
+                        });
+                    };
+                    fileReader.readAsArrayBuffer(audioBlob);
+                });
+            } catch (error) {
+                console.error("Error in encodeToMp3:", error);
+                return null;
+            }
+        }
 
         // --- Event Listeners ---
         startButton.addEventListener('click', startInterview);
-        micButton.addEventListener('click', toggleRecording);
+        micButton.addEventListener('click', handleRecording);
         finishLessonButton.addEventListener('click', generateAssets);
         startNewLessonButton.addEventListener('click', () => {
             currentLessonTitle = '';
             teachingPoints = [];
             currentPointIndex = -1;
             conversationHistory = [];
-            recorder = null;
-            audioBlob = null;
-            if (audioContext && audioContext.state !== 'closed') {
-                audioContext.close();
-            }
-            audioContext = null;
+            audioChunks = [];
+            mediaRecorder = null;
             switchView('lessonInput');
         });
         
@@ -495,50 +526,48 @@
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (SpeechRecognition) {
                 recognition = new SpeechRecognition();
-                recognition.continuous = true;
-                recognition.interimResults = true;
+                recognition.continuous = false; // Auto-stop is more reliable
+                recognition.interimResults = false;
 
                 recognition.onstart = () => {
                     isRecording = true;
+                    micButton.disabled = true; // Disable mic while listening
                     micButton.classList.remove('bg-[#FF6B6B]');
                     micButton.classList.add('bg-red-500', 'pulse');
-                    micStatus.textContent = 'Listening... Tap to stop';
+                    micStatus.textContent = 'Listening... (auto-stops on pause)';
                 };
 
                 recognition.onresult = (event) => {
-                    let final_transcript = '';
-                    for (let i = event.resultIndex; i < event.results.length; ++i) {
-                        if (event.results[i].isFinal) {
-                            final_transcript += event.results[i][0].transcript;
-                        }
+                    const transcript = event.results[0][0].transcript;
+                     if (mediaRecorder && mediaRecorder.state === "recording") {
+                        mediaRecorder.stop();
                     }
-                    if (final_transcript) {
-                       finalTranscriptForTurn = final_transcript;
+                    if (transcript.length > 3) {
+                        micStatus.textContent = 'Processing...';
+                        conversationHistory.push({ role: 'user', parts: [{ text: transcript }] });
+                        finishLessonButton.classList.remove('hidden');
+                        getNextAiResponse();
                     }
                 };
 
                 recognition.onend = () => {
-                    if (isRecording) { 
-                        // This case handles when the user is silent for too long and recognition stops
-                        toggleRecording(); // Stop everything gracefully
-                    } else { // This was a deliberate stop by the user
-                        if (finalTranscriptForTurn.length > 3) {
-                            conversationHistory.push({ role: 'user', parts: [{ text: finalTranscriptForTurn }] });
-                            finishLessonButton.classList.remove('hidden');
-                            getNextAiResponse();
-                        } else {
-                            micStatus.textContent = "Didn't catch that. Tap to try again.";
-                            micButton.disabled = false;
-                        }
-                    }
+                    isRecording = false;
+                    micButton.disabled = false; // Re-enable mic
+                    micButton.classList.remove('bg-red-500', 'pulse');
+                    micButton.classList.add('bg-[#FF6B6B]');
+                    micStatus.textContent = 'Tap to speak';
                 };
 
                 recognition.onerror = (event) => {
                     console.error("Speech recognition error:", event.error);
                     micStatus.textContent = `Mic Error: ${event.error}`;
-                    isRecording = false;
-                    micButton.classList.remove('bg-red-500', 'pulse');
-                    micButton.classList.add('bg-[#FF6B6B]');
+                    if(isRecording) {
+                        isRecording = false;
+                        if(mediaRecorder) mediaRecorder.stop();
+                        micButton.classList.remove('bg-red-500', 'pulse');
+                        micButton.classList.add('bg-[#FF6B6B]');
+                        micStatus.textContent = 'Tap to speak';
+                    }
                 };
             } else {
                  alert('Your browser does not support speech-to-text. Please use a modern browser like Chrome or Firefox.');
@@ -553,8 +582,6 @@
                 }
             }
         };
-
-        window.onload = init;
     </script>
 </body>
 </html>
