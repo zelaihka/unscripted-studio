@@ -377,10 +377,10 @@
         };
 
         const handleRecording = async () => {
-            // This function now only has one job: start the recording process.
-            // The speech recognition's 'onend' and 'onresult' events handle stopping.
-            if (!isRecording) {
-                 try {
+            if (isRecording) {
+                 if(recognition) recognition.stop();
+            } else {
+                try {
                     await startAudioRecording();
                     recognition.start();
                 } catch (err) {
