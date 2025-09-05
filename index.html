@@ -378,7 +378,7 @@
 
         const handleRecording = async () => {
             if (isRecording) {
-                 if(recognition) recognition.stop();
+                 if(recognition) recognition.stop(); // This will trigger the 'onend' event
             } else {
                 try {
                     await startAudioRecording();
